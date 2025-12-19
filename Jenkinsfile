@@ -45,7 +45,7 @@ pipeline {
                           "files": [
                             {
                               "pattern": "target/kitchensink.war",
-                              "target": "non-prod-repo/"
+                              "target": "new/"
                             }
                          ]
                     }'''
