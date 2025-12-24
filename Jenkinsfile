@@ -1,68 +1,92 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'maven'
+    }
+
     stages {
-        stage('compile code') {
+
+        stage('Compile Code') {
             steps {
-              sh '/opt/maven/bin/mvn compile '
+                sh '/opt/maven/bin/mvn clean compile'
             }
         }
-        stage('PMD code-review') {
+
+        stage('PMD Code Review') {
             steps {
-                sh '/opt/maven/bin/mvn -P metrics pmd:pmd  '
+                sh '/opt/maven/bin/mvn -P metrics pmd:pmd'
             }
             post {
-                success{
-                    recordIssues(tools: [pmdParser(pattern: '**/pmd.xml')])
+                success {
+                    recordIssues tools: [pmdParser(pattern: '**/pmd.xml')]
                 }
             }
         }
-        
-        stage('Sonar Code Analysis') {
+
+        stage('SonarQube Analysis') {
             environment {
-            scannerHome = tool 'sonarqube-scanner'
-        }
-        steps {
-            withSonarQubeEnv('SonarQube-Server') { 
-                sh "${scannerHome}/bin/sonar-scanner"
+                scannerHome = tool 'sonarqube-scanner'
             }
-            timeout(time: 3, unit: 'MINUTES') {
-                waitForQualityGate abortPipeline: true
+            steps {
+                withSonarQubeEnv('SonarQube-Server') {
+                    sh "${scannerHome}/bin/sonar-scanner"
+                }
             }
         }
-    }
-        
-        stage('package app') {
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 3, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Package App') {
             steps {
                 sh '/opt/maven/bin/mvn package'
             }
         }
-        stage('publish app to jfrog') {
+
+        stage('Publish Artifact to JFrog') {
             steps {
-                rtUpload (
+                rtUpload(
                     serverId: 'jfrog-dev',
                     spec: '''{
-                          "files": [
+                        "files": [
                             {
-                              "pattern": "target/kitchensink.war",
-                              "target": "new/"
+                                "pattern": "target/kitchensink.war",
+                                "target": "new/"
                             }
-                         ]
+                        ]
                     }'''
                 )
             }
         }
-        stage('Ansible Deploy to httpd') {
+
+        stage('Deploy with Ansible') {
             steps {
-                ansiblePlaybook becomeUser: null, credentialsId: 'ansible-token', disableHostKeyChecking: true, installation: 'ansible', inventory: 'inventory', playbook: 'playbook.yml', sudoUser: null
+                ansiblePlaybook(
+                    credentialsId: 'ec2-id',
+                    disableHostKeyChecking: true,
+                    installation: 'ansible',
+                    inventory: 'inventory',
+                    playbook: 'playbook.yml'
+                )
             }
         }
-        stage('build app as docker image and run as container'){
-            steps{
-                sh 'docker stop container $(docker ps | grep catalina | awk \'{ print $1 }\') || true' // this command looks for previously running app on port 8050 and kills it
-                sh 'docker build -t bloomy/myapp:1.0.$BUILD_NUMBER .'
-                sh 'docker run -d -p 8050:8050 --name myapp-1.0.$BUILD_NUMBER bloomy/myapp:1.0.$BUILD_NUMBER'
+
+        stage('Build & Run Docker Container') {
+            steps {
+                sh '''
+                docker ps -q --filter "name=myapp" | xargs -r docker stop
+                docker ps -aq --filter "name=myapp" | xargs -r docker rm
+
+                docker build -t bloomy/myapp:1.0.${BUILD_NUMBER} .
+                docker run -d -p 8050:8050 --name myapp bloomy/myapp:1.0.${BUILD_NUMBER}
+                '''
             }
-        }	
+        }
     }
 }
