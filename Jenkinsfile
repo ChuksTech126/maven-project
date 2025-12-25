@@ -72,7 +72,8 @@ pipeline {
                     disableHostKeyChecking: true,
                     installation: 'ansible',
                     inventory: 'inventory',
-                    playbook: 'playbook.yml'
+                    playbook: 'playbook.yml',
+                    extras: '--ssh-extra-args="-o StrictHostKeyChecking=no"'
                 )
             }
         }
