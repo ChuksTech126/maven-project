@@ -9,13 +9,13 @@ pipeline {
 
         stage('Compile Code') {
             steps {
-                sh '/opt/maven/bin/mvn clean compile'
+                sh 'mvn clean compile'
             }
         }
 
         stage('PMD Code Review') {
             steps {
-                sh '/opt/maven/bin/mvn -P metrics pmd:pmd'
+                sh 'mvn -P metrics pmd:pmd'
             }
             post {
                 success {
@@ -45,7 +45,7 @@ pipeline {
 
         stage('Package App') {
             steps {
-                sh '/opt/maven/bin/mvn package'
+                sh 'mvn package'
             }
         }
 
@@ -68,7 +68,7 @@ pipeline {
         stage('Deploy with Ansible') {
             steps {
                 ansiblePlaybook(
-                    credentialsId: 'ec2-id',
+                    credentialsId: 'ec2-ssh-key',
                     disableHostKeyChecking: true,
                     installation: 'ansible',
                     inventory: 'inventory',
