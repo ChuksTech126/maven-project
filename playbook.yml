@@ -41,12 +41,19 @@
       src: /var/lib/jenkins/workspace/new/target/kitchensink.war
       dest: /home/ec2-user/kitchensink.war
 
+  - name: Create Dockerfile on EC2
+    copy:
+      dest: /home/ec2-user/Dockerfile
+      content: |
+        FROM tomcat:9.0
+        COPY kitchensink.war /usr/local/tomcat/webapps/
+        EXPOSE 8080
+
   - name: Build Docker image
     community.docker.docker_image:
       name: bloomy/myapp:1.0
       build:
         path: /home/ec2-user
-        dockerfile: Dockerfile
 
   - name: Run webserver container
     community.docker.docker_container:
@@ -55,4 +62,4 @@
       state: started
       restart_policy: always
       ports:
-        - "8050:8050"
+        - "8050:8080"
