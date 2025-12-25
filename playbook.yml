@@ -1,50 +1,58 @@
 - hosts: httpd
   become: yes
-
   tasks:
-    - name: Ensure Python3 is installed
-      yum:
-        name: python3
-        state: present
 
-    - name: Install Docker SDK for Python (RPM-safe)
-      yum:
-        name: python3-docker
-        state: present
+  - name: Ensure Python3 is installed
+    yum:
+      name: python3
+      state: present
 
-    - name: Set up Docker yum repository
-      yum_repository:
-        name: docker
-        description: Docker CE Repository
-        baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
-        gpgcheck: yes
-        gpgkey: https://download.docker.com/linux/centos/gpg
-        enabled: yes
+  - name: Install Docker SDK for Python (RPM-safe)
+    package:
+      name: python3-docker
+      state: present
 
-    - name: Install Docker packages
-      yum:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-        state: present
+  - name: Set up Docker yum repository
+    yum_repository:
+      name: docker
+      description: DOCKER YUM repo
+      file: docker_repo
+      baseurl: https://download.docker.com/linux/centos/8/$basearch/stable
+      enabled: 1
+      gpgcheck: 1
+      gpgkey: https://download.docker.com/linux/centos/gpg
 
-    - name: Start and enable Docker service
-      service:
-        name: docker
-        state: started
-        enabled: yes
+  - name: Install Docker packages
+    yum:
+      name:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+      state: present
 
-    - name: Pull Docker image from Docker Hub
-      community.docker.docker_image:
-        name: bloomytech/my-webpage:2.0
-        source: pull
+  - name: Start and enable Docker service
+    service:
+      name: docker
+      state: started
+      enabled: yes
 
-    - name: Run webserver container
-      community.docker.docker_container:
-        name: webserver
-        image: bloomytech/my-webpage:2.0
-        state: started
-        restart_policy: always
-        ports:
-          - "8080:80"
+  - name: Copy WAR file from Jenkins to EC2
+    copy:
+      src: /var/lib/jenkins/workspace/new/target/kitchensink.war
+      dest: /home/ec2-user/kitchensink.war
+
+  - name: Build Docker image
+    community.docker.docker_image:
+      name: bloomy/myapp:1.0
+      build:
+        path: /home/ec2-user
+        dockerfile: Dockerfile
+
+  - name: Run webserver container
+    community.docker.docker_container:
+      name: myapp
+      image: bloomy/myapp:1.0
+      state: started
+      restart_policy: always
+      ports:
+        - "8050:8050"
