@@ -7,9 +7,9 @@
         name: python3
         state: present
 
-    - name: Ensure pip3 is installed
+    - name: Install Docker SDK for Python (RPM-safe)
       yum:
-        name: python3-pip
+        name: python3-docker
         state: present
 
     - name: Set up Docker yum repository
@@ -21,7 +21,7 @@
         gpgkey: https://download.docker.com/linux/centos/gpg
         enabled: yes
 
-    - name: Install Docker
+    - name: Install Docker packages
       yum:
         name:
           - docker-ce
@@ -29,18 +29,13 @@
           - containerd.io
         state: present
 
-    - name: Start and enable Docker
+    - name: Start and enable Docker service
       service:
         name: docker
         state: started
         enabled: yes
 
-    - name: Install Docker Python SDK
-      pip:
-        name: docker
-        executable: pip3
-
-    - name: Pull image from Docker Hub
+    - name: Pull Docker image from Docker Hub
       community.docker.docker_image:
         name: bloomytech/my-webpage:2.0
         source: pull
