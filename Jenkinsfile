@@ -5,6 +5,10 @@ pipeline {
         maven 'Maven-3.9.12'
     }
 
+    environment {
+        SONAR_SCANNER = tool 'sonarqube-scanner'
+    }
+
     stages {
 
         stage('Compile Code') {
@@ -25,12 +29,9 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            environment {
-                scannerHome = tool 'sonarqube-scanner'
-            }
             steps {
                 withSonarQubeEnv('SonarQube-Server') {
-                    sh "${scannerHome}/bin/sonar-scanner"
+                    sh "${SONAR_SCANNER}/bin/sonar-scanner"
                 }
             }
         }
@@ -65,7 +66,7 @@ pipeline {
             }
         }
 
-        stage('Deploy with Ansible') {
+        stage('Deploy and Run Docker on EC2') {
             steps {
                 ansiblePlaybook(
                     credentialsId: 'ec2-ssh-key',
@@ -75,18 +76,6 @@ pipeline {
                     playbook: 'playbook.yml',
                     extras: '--ssh-extra-args="-o StrictHostKeyChecking=no"'
                 )
-            }
-        }
-
-        stage('Build & Run Docker Container') {
-            steps {
-                sh '''
-                docker ps -q --filter "name=myapp" | xargs -r docker stop
-                docker ps -aq --filter "name=myapp" | xargs -r docker rm
-
-                docker build -t bloomy/myapp:1.0.${BUILD_NUMBER} .
-                docker run -d -p 8050:8050 --name myapp bloomy/myapp:1.0.${BUILD_NUMBER}
-                '''
             }
         }
     }
