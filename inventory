@@ -1,2 +1,2 @@
 [httpd]
-34.200.237.96
+34.200.237.96 ansible_user=ec2-user
