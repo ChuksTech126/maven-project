@@ -1,50 +1,93 @@
-- hosts: httpd
-  become: yes
+pipeline {
+    agent any
 
-  tasks:
-    - name: Ensure Python3 is installed
-      yum:
-        name: python3
-        state: present
+    tools {
+        maven 'Maven-3.9.12'
+    }
 
-    - name: Install Docker SDK for Python (RPM-safe)
-      yum:
-        name: python3-docker
-        state: present
+    stages {
 
-    - name: Set up Docker yum repository
-      yum_repository:
-        name: docker
-        description: Docker CE Repository
-        baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
-        gpgcheck: yes
-        gpgkey: https://download.docker.com/linux/centos/gpg
-        enabled: yes
+        stage('Compile Code') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
 
-    - name: Install Docker packages
-      yum:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-        state: present
+        stage('PMD Code Review') {
+            steps {
+                sh 'mvn -P metrics pmd:pmd'
+            }
+            post {
+                success {
+                    recordIssues tools: [pmdParser(pattern: '**/pmd.xml')]
+                }
+            }
+        }
 
-    - name: Start and enable Docker service
-      service:
-        name: docker
-        state: started
-        enabled: yes
+        stage('SonarQube Analysis') {
+            environment {
+                scannerHome = tool 'sonarqube-scanner'
+            }
+            steps {
+                withSonarQubeEnv('SonarQube-Server') {
+                    sh "${scannerHome}/bin/sonar-scanner"
+                }
+            }
+        }
 
-    - name: Pull Docker image from Docker Hub
-      community.docker.docker_image:
-        name: bloomytech/my-webpage:2.0
-        source: pull
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 3, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
 
-    - name: Run webserver container
-      community.docker.docker_container:
-        name: webserver
-        image: bloomytech/my-webpage:2.0
-        state: started
-        restart_policy: always
-        ports:
-          - "8080:80"
+        stage('Package App') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+
+        stage('Publish Artifact to JFrog') {
+            steps {
+                rtUpload(
+                    serverId: 'jfrog-dev',
+                    spec: '''{
+                        "files": [
+                            {
+                                "pattern": "target/kitchensink.war",
+                                "target": "new/"
+                            }
+                        ]
+                    }'''
+                )
+            }
+        }
+
+        stage('Deploy with Ansible') {
+            steps {
+                ansiblePlaybook(
+                    credentialsId: 'ec2-ssh-key',
+                    disableHostKeyChecking: true,
+                    installation: 'ansible',
+                    inventory: 'inventory',
+                    playbook: 'playbook.yml',
+                    extras: '--ssh-extra-args="-o StrictHostKeyChecking=no"'
+                )
+            }
+        }
+
+        stage('Build & Run Docker Container') {
+            steps {
+                sh '''
+                docker ps -q --filter "name=myapp" | xargs -r docker stop
+                docker ps -aq --filter "name=myapp" | xargs -r docker rm
+
+                docker build -t bloomy/myapp:1.0.${BUILD_NUMBER} .
+                docker run -d -p 8050:8050 --name myapp bloomy/myapp:1.0.${BUILD_NUMBER}
+                '''
+            }
+        }
+    }
+}
