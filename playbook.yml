@@ -51,14 +51,14 @@
 
   - name: Build Docker image
     community.docker.docker_image:
-      name: bloomy/myapp:1.0
+      name: bloomy/myapp:1.0.${BUILD_NUMBER}
       build:
         path: /home/ec2-user
 
   - name: Run webserver container
     community.docker.docker_container:
       name: myapp
-      image: bloomy/myapp:1.0
+      image: bloomy/myapp:1.0.${BUILD_NUMBER}
       state: started
       restart_policy: always
       ports:
