@@ -1,5 +1,9 @@
 - hosts: httpd
   become: yes
+
+  vars:
+    build_number: "{{ lookup('env','BUILD_NUMBER') }}"
+
   tasks:
 
   - name: Ensure Python3 is installed
@@ -7,7 +11,7 @@
       name: python3
       state: present
 
-  - name: Install Docker SDK for Python (RPM-safe)
+  - name: Install Docker SDK for Python
     package:
       name: python3-docker
       state: present
@@ -15,11 +19,9 @@
   - name: Set up Docker yum repository
     yum_repository:
       name: docker
-      description: DOCKER YUM repo
-      file: docker_repo
+      description: Docker YUM repo
       baseurl: https://download.docker.com/linux/centos/8/$basearch/stable
-      enabled: 1
-      gpgcheck: 1
+      gpgcheck: yes
       gpgkey: https://download.docker.com/linux/centos/gpg
 
   - name: Install Docker packages
@@ -36,14 +38,19 @@
       state: started
       enabled: yes
 
-  - name: Copy WAR file from Jenkins to EC2
+  - name: Create app directory
+    file:
+      path: /home/ec2-user/app
+      state: directory
+
+  - name: Copy WAR file to EC2
     copy:
       src: /var/lib/jenkins/workspace/new/target/kitchensink.war
-      dest: /home/ec2-user/kitchensink.war
+      dest: /home/ec2-user/app/kitchensink.war
 
   - name: Create Dockerfile on EC2
     copy:
-      dest: /home/ec2-user/Dockerfile
+      dest: /home/ec2-user/app/Dockerfile
       content: |
         FROM tomcat:9.0
         COPY kitchensink.war /usr/local/tomcat/webapps/
@@ -51,14 +58,16 @@
 
   - name: Build Docker image
     community.docker.docker_image:
-      name: bloomy/myapp:1.0.${BUILD_NUMBER}
+      name: bloomy/myapp
+      tag: "1.0.{{ build_number }}"
+      source: build
       build:
-        path: /home/ec2-user
+        path: /home/ec2-user/app
 
   - name: Run webserver container
     community.docker.docker_container:
       name: myapp
-      image: bloomy/myapp:1.0.${BUILD_NUMBER}
+      image: "bloomy/myapp:1.0.{{ build_number }}"
       state: started
       restart_policy: always
       ports:
